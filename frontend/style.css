@@ -1,0 +1,289 @@
+:root{
+--bg:#EEF6F4;
+--surface:#FFFFFF;
+--surface-alt:#E2EFEC;
+--ink:#1C3B36;
+--ink-dim:#63847E;
+--water:#2FA6A0;
+--water-deep:#1B7570;
+--accent:#FF6A47;
+--accent-soft:#FFE2D8;
+--border:#D6E7E2;
+--font-head:'Fredoka', sans-serif;
+--font-body:'Inter', system-ui, sans-serif;
+--sat: env(safe-area-inset-top, 0px);
+--sab: env(safe-area-inset-bottom, 0px);
+}
+/* ============================================================
+    GLOBAL RESET & SAFE-AREA
+    env(safe-area-inset-*) accounts for notches / gesture bars —
+    without it the top bar and toast collide with system UI on iOS.
+    ============================================================ */
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0; height:100%; overscroll-behavior:none;}
+body{
+background:var(--bg);
+font-family:var(--font-body);
+color:var(--ink);
+}
+
+.app{
+position:relative;
+min-height:100vh;
+min-height:100dvh;
+display:flex;
+flex-direction:column;
+padding:calc(16px + var(--sat)) 18px calc(16px + var(--sab));
+overflow-x:hidden;
+}
+
+/* ============================================================
+    TOP BAR — hamburger (side menu) + streak + notes/journal
+    ============================================================ */
+.topbar{
+display:flex; align-items:center; justify-content:space-between;
+margin-bottom:18px;
+}
+.icon-btn{
+width:40px; height:40px; border-radius:12px;
+background:var(--surface); border:1px solid var(--border);
+display:flex; align-items:center; justify-content:center;
+cursor:pointer; color:var(--ink);
+transition:background .15s ease;
+}
+.icon-btn:active{background:var(--surface-alt);}
+.icon-btn svg{width:20px;height:20px;}
+
+.streak-chip{
+display:flex; align-items:center; gap:6px;
+background:var(--surface); border:1px solid var(--border);
+padding:6px 12px; border-radius:20px;
+font-size:13px; font-weight:600; color:var(--ink);
+}
+
+/* ============================================================
+    GOAL READOUT — current ml vs daily target from the intake formula
+    clamp() keeps the big number legible on small phones without
+    a media-query ladder.
+    ============================================================ */
+.goal-readout{ text-align:center; margin-bottom:6px; }
+.goal-main{
+font-family:var(--font-head);
+font-size:clamp(28px, 8vw, 36px); font-weight:600; color:var(--ink);
+line-height:1.1;
+}
+.goal-main span{color:var(--ink-dim); font-size:0.6em; font-weight:500;}
+.goal-sub{ font-size:13px; color:var(--ink-dim); margin-top:2px; }
+
+/* ============================================================
+    GLASS — the core hero visual, fills as the user logs water.
+    clip-path draws the trapezoid; height% on .water-fill is the
+    only thing JS touches to animate progress.
+    ============================================================ */
+.glass-wrap{
+flex:1;
+display:flex; align-items:center; justify-content:center;
+position:relative; min-height:200px;
+}
+.glass{
+position:relative;
+width:min(46vw, 170px); height:min(64vw, 236px);
+clip-path:polygon(14% 0, 86% 0, 100% 100%, 0 100%);
+background:var(--surface);
+overflow:hidden;
+box-shadow:inset 0 0 0 1px var(--border);
+}
+.glass.celebrate{ box-shadow:inset 0 0 0 1px var(--border), 0 0 0 6px var(--accent-soft); }
+.water-fill{
+position:absolute; bottom:0; left:0; width:100%;
+height:38%;
+background:linear-gradient(180deg, var(--water) 0%, var(--water-deep) 100%);
+transition:height .8s cubic-bezier(.4,0,.2,1);
+}
+.wave{
+position:absolute; top:-10px; left:0;
+width:200%; height:20px;
+animation:wave-move 3.2s linear infinite;
+}
+@keyframes wave-move{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
+/* wave is decorative only — killed for users who opt out of motion */
+@media (prefers-reduced-motion: reduce){ .wave{animation:none;} }
+
+/* ============================================================
+    ADD ROW — drop button opens the full entry sheet;
+    the scroll-chips next to it are a one-tap shortcut for the
+    same action with sane defaults (see quickAdd in JS).
+    ============================================================ */
+.add-row{
+display:flex; align-items:center; gap:10px;
+margin-top:14px;
+}
+.drop-btn{
+flex:0 0 auto;
+width:60px; height:60px; border-radius:50%;
+background:var(--accent); color:#fff;
+border:none; display:flex; align-items:center; justify-content:center;
+box-shadow:0 10px 20px -6px rgba(255,106,71,0.55);
+cursor:pointer;
+}
+.drop-btn svg{width:26px;height:26px;}
+
+.quick-scroll{
+flex:1; display:flex; gap:8px;
+overflow-x:auto; padding:4px 2px;
+scrollbar-width:none;
+}
+.quick-scroll::-webkit-scrollbar{display:none;}
+.chip{
+flex:0 0 auto;
+display:flex; align-items:center; gap:6px;
+background:var(--surface); border:1px solid var(--border);
+padding:9px 14px; border-radius:22px;
+font-size:13px; font-weight:500; color:var(--ink);
+cursor:pointer; white-space:nowrap;
+}
+.chip:active{background:var(--surface-alt);}
+
+/* ============================================================
+    AI FAB — reserved slot for the future AI-chat entry point.
+    Dashed border signals "not live yet" without hiding it entirely.
+    ============================================================ */
+.ai-fab{
+position:fixed; right:18px; bottom:calc(18px + var(--sab));
+width:46px; height:46px; border-radius:50%;
+border:1.5px dashed var(--ink-dim);
+background:rgba(255,255,255,0.7);
+backdrop-filter:blur(4px);
+display:flex; align-items:center; justify-content:center;
+color:var(--ink-dim); cursor:pointer;
+z-index:20;
+}
+.ai-fab svg{width:20px;height:20px;}
+
+/* ============================================================
+    OVERLAY + BOTTOM SHEET — full add-entry flow:
+    drink type → amount → before/after meal → optional comment.
+    Shares one dim overlay with the side menu (closeAll() below).
+    ============================================================ */
+.overlay{
+position:fixed; inset:0; background:rgba(16,32,29,0.4);
+opacity:0; pointer-events:none; transition:opacity .25s ease;
+z-index:30;
+}
+.overlay.show{ opacity:1; pointer-events:auto; }
+
+.sheet{
+position:fixed; left:0; right:0; bottom:0;
+background:var(--surface);
+border-radius:26px 26px 0 0;
+padding:20px 20px calc(26px + var(--sab));
+transform:translateY(100%);
+transition:transform .3s cubic-bezier(.4,0,.2,1);
+z-index:31;
+max-height:85vh;
+overflow-y:auto;
+}
+.sheet.show{ transform:translateY(0); }
+.sheet-handle{
+width:36px; height:4px; background:var(--border);
+border-radius:2px; margin:0 auto 16px;
+}
+.sheet h3{ font-family:var(--font-head); font-size:19px; margin:0 0 14px; }
+.field-label{ font-size:12px; color:var(--ink-dim); margin:14px 0 8px; font-weight:500;}
+.type-row, .amount-row, .meal-row{ display:flex; gap:8px; flex-wrap:wrap; }
+.type-pill, .amount-pill, .meal-pill{
+padding:9px 14px; border-radius:14px; border:1.5px solid var(--border);
+background:var(--bg); font-size:13.5px; font-weight:500; cursor:pointer; color:var(--ink);
+}
+.type-pill.active, .amount-pill.active, .meal-pill.active{
+border-color:var(--water); background:var(--water); color:#fff;
+}
+.custom-input, .comment-input{
+width:100%; border:1.5px solid var(--border); border-radius:12px;
+padding:11px 13px; font-size:14px; font-family:var(--font-body);
+background:var(--bg); color:var(--ink); margin-top:2px;
+}
+.comment-input{ resize:none; height:56px; }
+.submit-btn{
+width:100%; margin-top:20px; padding:14px;
+background:var(--accent); color:#fff; border:none; border-radius:14px;
+font-size:15px; font-weight:600; font-family:var(--font-body); cursor:pointer;
+}
+
+/* Side menu: Settings / Friends (stub) / Calendar / History.
+    "History" is intentionally separate from the top-bar "Notes" —
+    one is a content feed, the other is the editable log of entries. */
+.side-menu{
+position:fixed; top:0; bottom:0; left:0;
+width:min(78vw, 280px); background:var(--surface);
+transform:translateX(-100%); transition:transform .3s cubic-bezier(.4,0,.2,1);
+z-index:31; padding:calc(24px + var(--sat)) 18px 20px;
+}
+.side-menu.show{ transform:translateX(0); }
+.side-menu h4{ font-family:var(--font-head); font-size:16px; margin:0 0 18px; }
+.menu-item{
+display:flex; align-items:center; gap:12px;
+padding:12px 8px; border-radius:12px; cursor:pointer;
+font-size:14.5px; font-weight:500; color:var(--ink);
+}
+.menu-item:active{background:var(--surface-alt);}
+.menu-item svg{width:19px;height:19px; color:var(--ink-dim); flex:0 0 auto;}
+.menu-item .soon{
+margin-left:auto; font-size:10.5px; color:var(--ink-dim);
+background:var(--surface-alt); padding:2px 8px; border-radius:10px;
+}
+
+/* Full-screen slide-in panels (Calendar / Notes / History) —
+    simple view-switching, no router needed at this scale. */
+.panel{
+position:fixed; inset:0; background:var(--bg);
+transform:translateX(100%); transition:transform .3s cubic-bezier(.4,0,.2,1);
+z-index:32; padding:calc(24px + var(--sat)) 18px calc(20px + var(--sab)); overflow-y:auto;
+}
+.panel.show{ transform:translateX(0); }
+.panel-head{ display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+.panel-head h3{ font-family:var(--font-head); font-size:19px; margin:0; }
+
+/* Calendar heatmap — GitHub-contributions style.
+    Cell shade = % of daily goal hit that day (mocked with random() here;
+    real version reads aggregated WaterLog per day from the API). */
+.heat-grid{
+display:grid; grid-template-columns:repeat(7,1fr); gap:5px; margin-top:12px;
+}
+.heat-cell{ aspect-ratio:1; border-radius:6px; background:var(--surface-alt); }
+.heat-legend{ display:flex; align-items:center; gap:6px; margin-top:14px; font-size:12px; color:var(--ink-dim);}
+.heat-legend .heat-cell{ width:14px; height:14px; }
+
+.post-card{
+background:var(--surface); border:1px solid var(--border);
+border-radius:16px; padding:14px 16px; margin-bottom:12px;
+}
+.post-card .cat{ font-size:11.5px; color:var(--water-deep); font-weight:600; margin-bottom:4px;}
+.post-card h5{ margin:0 0 4px; font-family:var(--font-head); font-size:15.5px; }
+.post-card p{ margin:0; font-size:13px; color:var(--ink-dim); line-height:1.5;}
+
+.log-item{
+display:flex; align-items:center; justify-content:space-between;
+background:var(--surface); border:1px solid var(--border);
+border-radius:14px; padding:11px 14px; margin-bottom:8px;
+}
+.log-item .meta{ font-size:13px; color:var(--ink-dim); }
+.log-item .del{ color:var(--accent); background:none; border:none; font-size:13px; font-weight:600; cursor:pointer; }
+
+/* Toast: confirms every log + gives a 4s window to undo it
+    (see showToast/undoLast in JS) — no separate delete needed for typos. */
+.toast{
+position:fixed; left:16px; right:16px; bottom:calc(20px + var(--sab));
+background:#10201D; color:#fff; padding:12px 16px; border-radius:14px;
+display:flex; align-items:center; justify-content:space-between;
+font-size:13.5px; z-index:40;
+transform:translateY(160%); transition:transform .3s ease;
+}
+.toast.show{ transform:translateY(0); }
+.toast button{ background:none; border:none; color:var(--accent); font-weight:600; font-size:13.5px; cursor:pointer; }
+
+/* wider phones / small tablets in portrait */
+@media (min-width:480px){
+.app{ max-width:480px; margin:0 auto; }
+.side-menu{ max-width:280px; }
+}

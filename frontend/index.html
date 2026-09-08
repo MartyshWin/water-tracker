@@ -1,644 +1,192 @@
 <!DOCTYPE html>
 <html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#EEF6F4">
-<title>Water Tracker</title>
-<!--
-  Water Tracker — MVP screen
-  Single-file static prototype: no build step, no framework.
-  Meant to run as-is inside a Telegram Mini App WebView (or any mobile browser).
-  Next phase migrates this markup into Vue 3 components — kept flat on purpose for now.
--->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --bg:#EEF6F4;
-    --surface:#FFFFFF;
-    --surface-alt:#E2EFEC;
-    --ink:#1C3B36;
-    --ink-dim:#63847E;
-    --water:#2FA6A0;
-    --water-deep:#1B7570;
-    --accent:#FF6A47;
-    --accent-soft:#FFE2D8;
-    --border:#D6E7E2;
-    --font-head:'Fredoka', sans-serif;
-    --font-body:'Inter', system-ui, sans-serif;
-    --sat: env(safe-area-inset-top, 0px);
-    --sab: env(safe-area-inset-bottom, 0px);
-  }
-  /* ============================================================
-     GLOBAL RESET & SAFE-AREA
-     env(safe-area-inset-*) accounts for notches / gesture bars —
-     without it the top bar and toast collide with system UI on iOS.
-     ============================================================ */
-  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0; height:100%; overscroll-behavior:none;}
-  body{
-    background:var(--bg);
-    font-family:var(--font-body);
-    color:var(--ink);
-  }
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#EEF6F4">
+  <title>Water Tracker</title>
+    <!--
+      Water Tracker — MVP screen
+      Single-file static prototype: no build step, no framework.
+      Meant to run as-is inside a Telegram Mini App WebView (or any mobile browser).
+      Next phase migrates this markup into Vue 3 components — kept flat on purpose for now.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
 
-  .app{
-    position:relative;
-    min-height:100vh;
-    min-height:100dvh;
-    display:flex;
-    flex-direction:column;
-    padding:calc(16px + var(--sat)) 18px calc(16px + var(--sab));
-    overflow-x:hidden;
-  }
+    <div class="app">
 
-  /* ============================================================
-     TOP BAR — hamburger (side menu) + streak + notes/journal
-     ============================================================ */
-  .topbar{
-    display:flex; align-items:center; justify-content:space-between;
-    margin-bottom:18px;
-  }
-  .icon-btn{
-    width:40px; height:40px; border-radius:12px;
-    background:var(--surface); border:1px solid var(--border);
-    display:flex; align-items:center; justify-content:center;
-    cursor:pointer; color:var(--ink);
-    transition:background .15s ease;
-  }
-  .icon-btn:active{background:var(--surface-alt);}
-  .icon-btn svg{width:20px;height:20px;}
-
-  .streak-chip{
-    display:flex; align-items:center; gap:6px;
-    background:var(--surface); border:1px solid var(--border);
-    padding:6px 12px; border-radius:20px;
-    font-size:13px; font-weight:600; color:var(--ink);
-  }
-
-  /* ============================================================
-     GOAL READOUT — current ml vs daily target from the intake formula
-     clamp() keeps the big number legible on small phones without
-     a media-query ladder.
-     ============================================================ */
-  .goal-readout{ text-align:center; margin-bottom:6px; }
-  .goal-main{
-    font-family:var(--font-head);
-    font-size:clamp(28px, 8vw, 36px); font-weight:600; color:var(--ink);
-    line-height:1.1;
-  }
-  .goal-main span{color:var(--ink-dim); font-size:0.6em; font-weight:500;}
-  .goal-sub{ font-size:13px; color:var(--ink-dim); margin-top:2px; }
-
-  /* ============================================================
-     GLASS — the core hero visual, fills as the user logs water.
-     clip-path draws the trapezoid; height% on .water-fill is the
-     only thing JS touches to animate progress.
-     ============================================================ */
-  .glass-wrap{
-    flex:1;
-    display:flex; align-items:center; justify-content:center;
-    position:relative; min-height:200px;
-  }
-  .glass{
-    position:relative;
-    width:min(46vw, 170px); height:min(64vw, 236px);
-    clip-path:polygon(14% 0, 86% 0, 100% 100%, 0 100%);
-    background:var(--surface);
-    overflow:hidden;
-    box-shadow:inset 0 0 0 1px var(--border);
-  }
-  .glass.celebrate{ box-shadow:inset 0 0 0 1px var(--border), 0 0 0 6px var(--accent-soft); }
-  .water-fill{
-    position:absolute; bottom:0; left:0; width:100%;
-    height:38%;
-    background:linear-gradient(180deg, var(--water) 0%, var(--water-deep) 100%);
-    transition:height .8s cubic-bezier(.4,0,.2,1);
-  }
-  .wave{
-    position:absolute; top:-10px; left:0;
-    width:200%; height:20px;
-    animation:wave-move 3.2s linear infinite;
-  }
-  @keyframes wave-move{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
-  /* wave is decorative only — killed for users who opt out of motion */
-  @media (prefers-reduced-motion: reduce){ .wave{animation:none;} }
-
-  /* ============================================================
-     ADD ROW — drop button opens the full entry sheet;
-     the scroll-chips next to it are a one-tap shortcut for the
-     same action with sane defaults (see quickAdd in JS).
-     ============================================================ */
-  .add-row{
-    display:flex; align-items:center; gap:10px;
-    margin-top:14px;
-  }
-  .drop-btn{
-    flex:0 0 auto;
-    width:60px; height:60px; border-radius:50%;
-    background:var(--accent); color:#fff;
-    border:none; display:flex; align-items:center; justify-content:center;
-    box-shadow:0 10px 20px -6px rgba(255,106,71,0.55);
-    cursor:pointer;
-  }
-  .drop-btn svg{width:26px;height:26px;}
-
-  .quick-scroll{
-    flex:1; display:flex; gap:8px;
-    overflow-x:auto; padding:4px 2px;
-    scrollbar-width:none;
-  }
-  .quick-scroll::-webkit-scrollbar{display:none;}
-  .chip{
-    flex:0 0 auto;
-    display:flex; align-items:center; gap:6px;
-    background:var(--surface); border:1px solid var(--border);
-    padding:9px 14px; border-radius:22px;
-    font-size:13px; font-weight:500; color:var(--ink);
-    cursor:pointer; white-space:nowrap;
-  }
-  .chip:active{background:var(--surface-alt);}
-
-  /* ============================================================
-     AI FAB — reserved slot for the future AI-chat entry point.
-     Dashed border signals "not live yet" without hiding it entirely.
-     ============================================================ */
-  .ai-fab{
-    position:fixed; right:18px; bottom:calc(18px + var(--sab));
-    width:46px; height:46px; border-radius:50%;
-    border:1.5px dashed var(--ink-dim);
-    background:rgba(255,255,255,0.7);
-    backdrop-filter:blur(4px);
-    display:flex; align-items:center; justify-content:center;
-    color:var(--ink-dim); cursor:pointer;
-    z-index:20;
-  }
-  .ai-fab svg{width:20px;height:20px;}
-
-  /* ============================================================
-     OVERLAY + BOTTOM SHEET — full add-entry flow:
-     drink type → amount → before/after meal → optional comment.
-     Shares one dim overlay with the side menu (closeAll() below).
-     ============================================================ */
-  .overlay{
-    position:fixed; inset:0; background:rgba(16,32,29,0.4);
-    opacity:0; pointer-events:none; transition:opacity .25s ease;
-    z-index:30;
-  }
-  .overlay.show{ opacity:1; pointer-events:auto; }
-
-  .sheet{
-    position:fixed; left:0; right:0; bottom:0;
-    background:var(--surface);
-    border-radius:26px 26px 0 0;
-    padding:20px 20px calc(26px + var(--sab));
-    transform:translateY(100%);
-    transition:transform .3s cubic-bezier(.4,0,.2,1);
-    z-index:31;
-    max-height:85vh;
-    overflow-y:auto;
-  }
-  .sheet.show{ transform:translateY(0); }
-  .sheet-handle{
-    width:36px; height:4px; background:var(--border);
-    border-radius:2px; margin:0 auto 16px;
-  }
-  .sheet h3{ font-family:var(--font-head); font-size:19px; margin:0 0 14px; }
-  .field-label{ font-size:12px; color:var(--ink-dim); margin:14px 0 8px; font-weight:500;}
-  .type-row, .amount-row, .meal-row{ display:flex; gap:8px; flex-wrap:wrap; }
-  .type-pill, .amount-pill, .meal-pill{
-    padding:9px 14px; border-radius:14px; border:1.5px solid var(--border);
-    background:var(--bg); font-size:13.5px; font-weight:500; cursor:pointer; color:var(--ink);
-  }
-  .type-pill.active, .amount-pill.active, .meal-pill.active{
-    border-color:var(--water); background:var(--water); color:#fff;
-  }
-  .custom-input, .comment-input{
-    width:100%; border:1.5px solid var(--border); border-radius:12px;
-    padding:11px 13px; font-size:14px; font-family:var(--font-body);
-    background:var(--bg); color:var(--ink); margin-top:2px;
-  }
-  .comment-input{ resize:none; height:56px; }
-  .submit-btn{
-    width:100%; margin-top:20px; padding:14px;
-    background:var(--accent); color:#fff; border:none; border-radius:14px;
-    font-size:15px; font-weight:600; font-family:var(--font-body); cursor:pointer;
-  }
-
-  /* Side menu: Settings / Friends (stub) / Calendar / History.
-     "History" is intentionally separate from the top-bar "Notes" —
-     one is a content feed, the other is the editable log of entries. */
-  .side-menu{
-    position:fixed; top:0; bottom:0; left:0;
-    width:min(78vw, 280px); background:var(--surface);
-    transform:translateX(-100%); transition:transform .3s cubic-bezier(.4,0,.2,1);
-    z-index:31; padding:calc(24px + var(--sat)) 18px 20px;
-  }
-  .side-menu.show{ transform:translateX(0); }
-  .side-menu h4{ font-family:var(--font-head); font-size:16px; margin:0 0 18px; }
-  .menu-item{
-    display:flex; align-items:center; gap:12px;
-    padding:12px 8px; border-radius:12px; cursor:pointer;
-    font-size:14.5px; font-weight:500; color:var(--ink);
-  }
-  .menu-item:active{background:var(--surface-alt);}
-  .menu-item svg{width:19px;height:19px; color:var(--ink-dim); flex:0 0 auto;}
-  .menu-item .soon{
-    margin-left:auto; font-size:10.5px; color:var(--ink-dim);
-    background:var(--surface-alt); padding:2px 8px; border-radius:10px;
-  }
-
-  /* Full-screen slide-in panels (Calendar / Notes / History) —
-     simple view-switching, no router needed at this scale. */
-  .panel{
-    position:fixed; inset:0; background:var(--bg);
-    transform:translateX(100%); transition:transform .3s cubic-bezier(.4,0,.2,1);
-    z-index:32; padding:calc(24px + var(--sat)) 18px calc(20px + var(--sab)); overflow-y:auto;
-  }
-  .panel.show{ transform:translateX(0); }
-  .panel-head{ display:flex; align-items:center; gap:12px; margin-bottom:18px; }
-  .panel-head h3{ font-family:var(--font-head); font-size:19px; margin:0; }
-
-  /* Calendar heatmap — GitHub-contributions style.
-     Cell shade = % of daily goal hit that day (mocked with random() here;
-     real version reads aggregated WaterLog per day from the API). */
-  .heat-grid{
-    display:grid; grid-template-columns:repeat(7,1fr); gap:5px; margin-top:12px;
-  }
-  .heat-cell{ aspect-ratio:1; border-radius:6px; background:var(--surface-alt); }
-  .heat-legend{ display:flex; align-items:center; gap:6px; margin-top:14px; font-size:12px; color:var(--ink-dim);}
-  .heat-legend .heat-cell{ width:14px; height:14px; }
-
-  .post-card{
-    background:var(--surface); border:1px solid var(--border);
-    border-radius:16px; padding:14px 16px; margin-bottom:12px;
-  }
-  .post-card .cat{ font-size:11.5px; color:var(--water-deep); font-weight:600; margin-bottom:4px;}
-  .post-card h5{ margin:0 0 4px; font-family:var(--font-head); font-size:15.5px; }
-  .post-card p{ margin:0; font-size:13px; color:var(--ink-dim); line-height:1.5;}
-
-  .log-item{
-    display:flex; align-items:center; justify-content:space-between;
-    background:var(--surface); border:1px solid var(--border);
-    border-radius:14px; padding:11px 14px; margin-bottom:8px;
-  }
-  .log-item .meta{ font-size:13px; color:var(--ink-dim); }
-  .log-item .del{ color:var(--accent); background:none; border:none; font-size:13px; font-weight:600; cursor:pointer; }
-
-  /* Toast: confirms every log + gives a 4s window to undo it
-     (see showToast/undoLast in JS) — no separate delete needed for typos. */
-  .toast{
-    position:fixed; left:16px; right:16px; bottom:calc(20px + var(--sab));
-    background:#10201D; color:#fff; padding:12px 16px; border-radius:14px;
-    display:flex; align-items:center; justify-content:space-between;
-    font-size:13.5px; z-index:40;
-    transform:translateY(160%); transition:transform .3s ease;
-  }
-  .toast.show{ transform:translateY(0); }
-  .toast button{ background:none; border:none; color:var(--accent); font-weight:600; font-size:13.5px; cursor:pointer; }
-
-  /* wider phones / small tablets in portrait */
-  @media (min-width:480px){
-    .app{ max-width:480px; margin:0 auto; }
-    .side-menu{ max-width:280px; }
-  }
-</style>
-</head>
-<body>
-
-<div class="app">
-
-  <!-- top bar -->
-  <div class="topbar">
-    <div class="icon-btn" onclick="toggleMenu(true)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-    </div>
-    <div class="streak-chip">🔥 <span id="streakVal">5</span> дней</div>
-    <div class="icon-btn" onclick="openPanel('journal')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V5a2 2 0 012-2h11a1 1 0 011 1v13.5M6 21h12a1 1 0 001-1v-2H7a1 1 0 00-1 1v1a1 1 0 001 1z"/></svg>
-    </div>
-  </div>
-
-  <!-- goal -->
-  <div class="goal-readout">
-    <div class="goal-main"><span id="curVal">900</span> <span>/ 2400 мл</span></div>
-    <div class="goal-sub" id="goalSub">осталось 1500 мл сегодня</div>
-  </div>
-
-  <!-- glass -->
-  <div class="glass-wrap">
-    <div class="glass" id="glass">
-      <div class="water-fill" id="waterFill" style="height:38%">
-        <svg class="wave" viewBox="0 0 200 20" preserveAspectRatio="none">
-          <path d="M0 10 C 25 0, 75 20, 100 10 C 125 0, 175 20, 200 10 V20 H0 Z" fill="rgba(255,255,255,0.25)"/>
-        </svg>
+      <!-- top bar -->
+      <div class="topbar">
+        <div class="icon-btn" onclick="toggleMenu(true)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </div>
+        <div class="streak-chip">🔥 <span id="streakVal">5</span> дней</div>
+        <div class="icon-btn" onclick="openPanel('journal')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V5a2 2 0 012-2h11a1 1 0 011 1v13.5M6 21h12a1 1 0 001-1v-2H7a1 1 0 00-1 1v1a1 1 0 001 1z"/></svg>
+        </div>
       </div>
-    </div>
-  </div>
 
-  <!-- add row -->
-  <div class="add-row">
-    <button class="drop-btn" onclick="openSheet()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-    </button>
-    <div class="quick-scroll">
-      <div class="chip" onclick="quickAdd('Вода',250,1.0)">💧 Вода</div>
-      <div class="chip" onclick="quickAdd('Чай',200,0.9)">🍵 Чай</div>
-      <div class="chip" onclick="quickAdd('Кофе',150,0.75)">☕ Кофе</div>
-      <div class="chip" onclick="quickAdd('Сок',200,0.9)">🧃 Сок</div>
-    </div>
-  </div>
-
-  <div class="ai-fab" onclick="showToast('Чат с ИИ — скоро', null)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-  </div>
-
-  <!-- overlay -->
-  <div class="overlay" id="overlay" onclick="closeAll()"></div>
-
-  <!-- bottom sheet -->
-  <div class="sheet" id="sheet">
-    <div class="sheet-handle"></div>
-    <h3>Добавить запись</h3>
-
-    <div class="field-label">Напиток</div>
-    <div class="type-row" id="typeRow">
-      <div class="type-pill active" data-factor="1.0" onclick="selectPill(this,'typeRow')">💧 Вода</div>
-      <div class="type-pill" data-factor="0.9" onclick="selectPill(this,'typeRow')">🍵 Чай</div>
-      <div class="type-pill" data-factor="0.75" onclick="selectPill(this,'typeRow')">☕ Кофе</div>
-      <div class="type-pill" data-factor="0.9" onclick="selectPill(this,'typeRow')">🧃 Сок</div>
-    </div>
-
-    <div class="field-label">Количество, мл</div>
-    <div class="amount-row" id="amountRow">
-      <div class="amount-pill" onclick="selectPill(this,'amountRow')">100</div>
-      <div class="amount-pill active" onclick="selectPill(this,'amountRow')">200</div>
-      <div class="amount-pill" onclick="selectPill(this,'amountRow')">300</div>
-      <div class="amount-pill" onclick="selectPill(this,'amountRow')">500</div>
-    </div>
-    <input type="number" class="custom-input" id="customAmount" placeholder="или своё количество">
-
-    <div class="field-label">Приём пищи</div>
-    <div class="meal-row" id="mealRow">
-      <div class="meal-pill active" onclick="selectPill(this,'mealRow')">Без привязки</div>
-      <div class="meal-pill" onclick="selectPill(this,'mealRow')">До еды</div>
-      <div class="meal-pill" onclick="selectPill(this,'mealRow')">После еды</div>
-    </div>
-
-    <div class="field-label">Комментарий</div>
-    <textarea class="comment-input" id="commentInput" placeholder="например: переел, добавил воды"></textarea>
-
-    <button class="submit-btn" onclick="submitSheet()">Добавить</button>
-  </div>
-
-  <!-- side menu -->
-  <div class="side-menu" id="sideMenu">
-    <h4>Меню</h4>
-    <div class="menu-item" onclick="showToast('Настройки — скоро', null)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9c.14.36.22.75.22 1.15"/></svg>
-      Настройки
-    </div>
-    <div class="menu-item" onclick="showToast('Друзья — скоро', null)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-      Друзья <span class="soon">позже</span>
-    </div>
-    <div class="menu-item" onclick="openPanel('calendar')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-      Календарь
-    </div>
-    <div class="menu-item" onclick="openPanel('history')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1010 4.13"/><path d="M12 7v5l4 2"/></svg>
-      История
-    </div>
-  </div>
-
-  <!-- calendar panel -->
-  <div class="panel" id="panel-calendar">
-    <div class="panel-head">
-      <div class="icon-btn" onclick="closePanel('calendar')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+      <!-- goal -->
+      <div class="goal-readout">
+        <div class="goal-main"><span id="curVal">900</span> <span>/ 2400 мл</span></div>
+        <div class="goal-sub" id="goalSub">осталось 1500 мл сегодня</div>
       </div>
-      <h3>Календарь</h3>
-    </div>
-    <div class="goal-sub" style="text-align:left;margin-bottom:4px;">Сентябрь 2026 · стрик 5 дней</div>
-    <div class="heat-grid" id="heatGrid"></div>
-    <div class="heat-legend">
-      <span>меньше</span>
-      <div class="heat-cell" style="background:#E2EFEC"></div>
-      <div class="heat-cell" style="background:#9AD6D0"></div>
-      <div class="heat-cell" style="background:#4FB6AE"></div>
-      <div class="heat-cell" style="background:#1B7570"></div>
-      <span>больше</span>
-    </div>
-  </div>
 
-  <!-- journal panel -->
-  <div class="panel" id="panel-journal">
-    <div class="panel-head">
-      <div class="icon-btn" onclick="closePanel('journal')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+      <!-- glass -->
+      <div class="glass-wrap">
+        <div class="glass" id="glass">
+          <div class="water-fill" id="waterFill" style="height:38%">
+            <svg class="wave" viewBox="0 0 200 20" preserveAspectRatio="none">
+              <path d="M0 10 C 25 0, 75 20, 100 10 C 125 0, 175 20, 200 10 V20 H0 Z" fill="rgba(255,255,255,0.25)"/>
+            </svg>
+          </div>
+        </div>
       </div>
-      <h3>Заметки</h3>
-    </div>
-    <div class="post-card">
-      <div class="cat">факт</div>
-      <h5>Чай и кофе тоже считаются</h5>
-      <p>Но гидратируют слабее воды из-за мочегонного эффекта — поэтому в счётчике они идут с понижающим коэффициентом.</p>
-    </div>
-    <div class="post-card">
-      <div class="cat">рецепт</div>
-      <h5>Вода с огурцом и мятой</h5>
-      <p>Простой способ разнообразить обычную воду, если пить её "просто так" скучно.</p>
-    </div>
-    <div class="post-card">
-      <div class="cat">новости проекта</div>
-      <h5>Добавили историю записей</h5>
-      <p>Теперь можно посмотреть и удалить любую запись за день — в меню слева.</p>
-    </div>
-  </div>
 
-  <!-- history panel -->
-  <div class="panel" id="panel-history">
-    <div class="panel-head">
-      <div class="icon-btn" onclick="closePanel('history')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+      <!-- add row -->
+      <div class="add-row">
+        <button class="drop-btn" onclick="openSheet()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <div class="quick-scroll">
+          <div class="chip" onclick="quickAdd('Вода',250,1.0)">💧 Вода</div>
+          <div class="chip" onclick="quickAdd('Чай',200,0.9)">🍵 Чай</div>
+          <div class="chip" onclick="quickAdd('Кофе',150,0.75)">☕ Кофе</div>
+          <div class="chip" onclick="quickAdd('Сок',200,0.9)">🧃 Сок</div>
+        </div>
       </div>
-      <h3>История · сегодня</h3>
+
+      <div class="ai-fab" onclick="showToast('Чат с ИИ — скоро', null)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+      </div>
+
+      <!-- overlay -->
+      <div class="overlay" id="overlay" onclick="closeAll()"></div>
+
+      <!-- bottom sheet -->
+      <div class="sheet" id="sheet">
+        <div class="sheet-handle"></div>
+        <h3>Добавить запись</h3>
+
+        <div class="field-label">Напиток</div>
+        <div class="type-row" id="typeRow">
+          <div class="type-pill active" data-factor="1.0" onclick="selectPill(this,'typeRow')">💧 Вода</div>
+          <div class="type-pill" data-factor="0.9" onclick="selectPill(this,'typeRow')">🍵 Чай</div>
+          <div class="type-pill" data-factor="0.75" onclick="selectPill(this,'typeRow')">☕ Кофе</div>
+          <div class="type-pill" data-factor="0.9" onclick="selectPill(this,'typeRow')">🧃 Сок</div>
+        </div>
+
+        <div class="field-label">Количество, мл</div>
+        <div class="amount-row" id="amountRow">
+          <div class="amount-pill" onclick="selectPill(this,'amountRow')">100</div>
+          <div class="amount-pill active" onclick="selectPill(this,'amountRow')">200</div>
+          <div class="amount-pill" onclick="selectPill(this,'amountRow')">300</div>
+          <div class="amount-pill" onclick="selectPill(this,'amountRow')">500</div>
+        </div>
+        <input type="number" class="custom-input" id="customAmount" placeholder="или своё количество">
+
+        <div class="field-label">Приём пищи</div>
+        <div class="meal-row" id="mealRow">
+          <div class="meal-pill active" onclick="selectPill(this,'mealRow')">Без привязки</div>
+          <div class="meal-pill" onclick="selectPill(this,'mealRow')">До еды</div>
+          <div class="meal-pill" onclick="selectPill(this,'mealRow')">После еды</div>
+        </div>
+
+        <div class="field-label">Комментарий</div>
+        <textarea class="comment-input" id="commentInput" placeholder="например: переел, добавил воды"></textarea>
+
+        <button class="submit-btn" onclick="submitSheet()">Добавить</button>
+      </div>
+
+      <!-- side menu -->
+      <div class="side-menu" id="sideMenu">
+        <h4>Меню</h4>
+        <div class="menu-item" onclick="showToast('Настройки — скоро', null)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9c.14.36.22.75.22 1.15"/></svg>
+          Настройки
+        </div>
+        <div class="menu-item" onclick="showToast('Друзья — скоро', null)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+          Друзья <span class="soon">позже</span>
+        </div>
+        <div class="menu-item" onclick="openPanel('calendar')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          Календарь
+        </div>
+        <div class="menu-item" onclick="openPanel('history')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1010 4.13"/><path d="M12 7v5l4 2"/></svg>
+          История
+        </div>
+      </div>
+
+      <!-- calendar panel -->
+      <div class="panel" id="panel-calendar">
+        <div class="panel-head">
+          <div class="icon-btn" onclick="closePanel('calendar')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </div>
+          <h3>Календарь</h3>
+        </div>
+        <div class="goal-sub" style="text-align:left;margin-bottom:4px;">Сентябрь 2026 · стрик 5 дней</div>
+        <div class="heat-grid" id="heatGrid"></div>
+        <div class="heat-legend">
+          <span>меньше</span>
+          <div class="heat-cell" style="background:#E2EFEC"></div>
+          <div class="heat-cell" style="background:#9AD6D0"></div>
+          <div class="heat-cell" style="background:#4FB6AE"></div>
+          <div class="heat-cell" style="background:#1B7570"></div>
+          <span>больше</span>
+        </div>
+      </div>
+
+      <!-- journal panel -->
+      <div class="panel" id="panel-journal">
+        <div class="panel-head">
+          <div class="icon-btn" onclick="closePanel('journal')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </div>
+          <h3>Заметки</h3>
+        </div>
+        <div class="post-card">
+          <div class="cat">факт</div>
+          <h5>Чай и кофе тоже считаются</h5>
+          <p>Но гидратируют слабее воды из-за мочегонного эффекта — поэтому в счётчике они идут с понижающим коэффициентом.</p>
+        </div>
+        <div class="post-card">
+          <div class="cat">рецепт</div>
+          <h5>Вода с огурцом и мятой</h5>
+          <p>Простой способ разнообразить обычную воду, если пить её "просто так" скучно.</p>
+        </div>
+        <div class="post-card">
+          <div class="cat">новости проекта</div>
+          <h5>Добавили историю записей</h5>
+          <p>Теперь можно посмотреть и удалить любую запись за день — в меню слева.</p>
+        </div>
+      </div>
+
+      <!-- history panel -->
+      <div class="panel" id="panel-history">
+        <div class="panel-head">
+          <div class="icon-btn" onclick="closePanel('history')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </div>
+          <h3>История · сегодня</h3>
+        </div>
+        <div id="logList"></div>
+      </div>
+
+      <!-- toast -->
+      <div class="toast" id="toast">
+        <span id="toastText"></span>
+        <button id="toastUndo" onclick="undoLast()">Отменить</button>
+      </div>
+
     </div>
-    <div id="logList"></div>
-  </div>
 
-  <!-- toast -->
-  <div class="toast" id="toast">
-    <span id="toastText"></span>
-    <button id="toastUndo" onclick="undoLast()">Отменить</button>
-  </div>
-
-</div>
-
-<script>
-/* ==================================================================
-   STATE — placeholder in-memory data.
-   In the real app: GOAL comes from the intake formula (weight, gender,
-   climate, activity), `logs` is fetched from GET /water-logs?date=today.
-   ================================================================== */
-const GOAL = 2400;
-let current = 0;
-let logs = [];
-let lastEntry = null;   // enables one-tap undo from the toast
-let toastTimer = null;
-
-// Fetches today's logs from the backend and renders the initial state.
-async function loadLogs(){
-  const res = await fetch('/api/logs');
-  logs = await res.json();
-  current = logs.reduce((sum, l) => sum + Math.round(l.amount_ml * l.hydration_factor), 0);
-  renderGlass();
-  renderLogs();
-}
-
-function renderGlass(){
-  const pct = Math.min(100, Math.round((current/GOAL)*100));
-  document.getElementById('waterFill').style.height = Math.max(4,pct) + '%';
-  document.getElementById('curVal').textContent = current;
-  const left = GOAL - current;
-  const sub = document.getElementById('goalSub');
-  const glass = document.getElementById('glass');
-  if(left <= 0){
-    sub.textContent = 'цель дня достигнута 🎉';
-    glass.classList.add('celebrate');
-  } else {
-    sub.textContent = 'осталось ' + left + ' мл сегодня';
-    glass.classList.remove('celebrate');
-  }
-}
-
-function renderLogs(){
-  const list = document.getElementById('logList');
-  list.innerHTML = '';
-  logs.slice().reverse().forEach((l) => {
-    const time = new Date(l.logged_at).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
-    const row = document.createElement('div');
-    row.className = 'log-item';
-    row.innerHTML = `<span class="meta">${time} · ${l.drink_type} · ${l.amount_ml} мл</span>
-      <button class="del" onclick="deleteLog(${l.id})">удалить</button>`;
-    list.appendChild(row);
-  });
-}
-
-// Deletes by id (matches the backend's DELETE /api/logs/{id}).
-async function deleteLog(id){
-  const l = logs.find(x => x.id === id);
-  if(!l) return;
-  await fetch('/api/logs/' + id, {method:'DELETE'});
-  current = Math.max(0, current - Math.round(l.amount_ml * l.hydration_factor));
-  logs = logs.filter(x => x.id !== id);
-  renderGlass(); renderLogs();
-}
-
-// `effective` (amount_ml * hydration_factor) ≠ raw amount_ml: tea/coffee
-// hydrate less than water, so the glass fills by the effective volume
-// while the log keeps the real poured amount.
-async function addEntry(type, amount, factor, meal, comment){
-  const res = await fetch('/api/logs', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-      drink_type: type,
-      amount_ml: amount,
-      hydration_factor: factor,
-      meal_relation: meal,
-      comment: comment
-    })
-  });
-  const entry = await res.json();
-  logs.push(entry);
-  current += Math.round(entry.amount_ml * entry.hydration_factor);
-  lastEntry = entry;
-  renderGlass(); renderLogs();
-  showToast('Добавлено: ' + type + ' ' + amount + ' мл', undoLast);
-}
-
-function quickAdd(type, amount, factor){
-  addEntry(type, amount, factor, null, null);
-}
-
-// Undo = delete the just-created entry via the same API call as deleteLog.
-async function undoLast(){
-  if(!lastEntry) return;
-  await deleteLog(lastEntry.id);
-  lastEntry = null;
-  hideToast();
-}
-
-function showToast(text, undoFn){
-  document.getElementById('toastText').textContent = text;
-  document.getElementById('toastUndo').style.display = undoFn ? 'inline' : 'none';
-  document.getElementById('toast').classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(hideToast, 4000);
-}
-function hideToast(){ document.getElementById('toast').classList.remove('show'); }
-
-function selectPill(el, groupId){
-  document.querySelectorAll('#'+groupId+' > *').forEach(p => p.classList.remove('active'));
-  el.classList.add('active');
-  if(groupId === 'amountRow'){ document.getElementById('customAmount').value = ''; }
-}
-
-function submitSheet(){
-  const type = document.querySelector('#typeRow .active');
-  const typeLabel = type.textContent.trim();
-  const factor = parseFloat(type.dataset.factor);
-  const custom = document.getElementById('customAmount').value;
-  const amountPill = document.querySelector('#amountRow .active');
-  const amount = custom ? parseInt(custom) : parseInt(amountPill.textContent);
-  const meal = document.querySelector('#mealRow .active').textContent.trim();
-  const comment = document.getElementById('commentInput').value;
-  if(!amount || amount <= 0) return;
-  addEntry(typeLabel, amount, factor, meal, comment);
-  document.getElementById('commentInput').value = '';
-  closeAll();
-}
-
-function openSheet(){
-  document.getElementById('overlay').classList.add('show');
-  document.getElementById('sheet').classList.add('show');
-}
-function toggleMenu(open){
-  document.getElementById('overlay').classList.toggle('show', open);
-  document.getElementById('sideMenu').classList.toggle('show', open);
-}
-function openPanel(name){
-  document.getElementById('panel-'+name).classList.add('show');
-  toggleMenu(false);
-}
-function closePanel(name){
-  document.getElementById('panel-'+name).classList.remove('show');
-}
-function closeAll(){
-  document.getElementById('overlay').classList.remove('show');
-  document.getElementById('sheet').classList.remove('show');
-  document.getElementById('sideMenu').classList.remove('show');
-}
-
-// Demo-only random fill — swap for real per-day goal-completion % from the API.
-function buildHeatmap(){
-  const grid = document.getElementById('heatGrid');
-  const colors = ['#E2EFEC','#9AD6D0','#4FB6AE','#1B7570'];
-  for(let i=0;i<35;i++){
-    const cell = document.createElement('div');
-    cell.className = 'heat-cell';
-    const level = Math.random() < 0.15 ? 0 : Math.floor(Math.random()*4);
-    cell.style.background = colors[level];
-    grid.appendChild(cell);
-  }
-}
-
-loadLogs();
-buildHeatmap();
-</script>
-
-</body>
+    <script src="main.js"></script>
+  </body>
 </html>
