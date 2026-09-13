@@ -17,3 +17,7 @@ dist/
 
 # Env
 .env
+/backend/.env
+
+# Trash
+/backend/FastAPI/
