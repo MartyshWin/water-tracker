@@ -9,11 +9,31 @@ let logs = [];
 let lastEntry = null;   // enables one-tap undo from the toast
 let toastTimer = null;
 
+// добавь в начало, рядом с let logs = []
+let drinkTypes = [];
+
+// новая функция — вызывается один раз при старте
+async function loadDrinkTypes(){
+  const res = await fetch('/api/drink-types');
+  drinkTypes = await res.json();
+}
+
+// найти id по имени (для quickAdd и submitSheet)
+function findDrinkTypeId(name){
+  const dt = drinkTypes.find(d => d.name === name);
+  return dt ? dt.id : drinkTypes[0]?.id;
+}
+
 // Fetches today's logs from the backend and renders the initial state.
 async function loadLogs(){
+  await loadDrinkTypes();
   const res = await fetch('/api/logs');
-  logs = await res.json();
-  current = logs.reduce((sum, l) => sum + Math.round(l.amount_ml * l.hydration_factor), 0);
+  const raw = await res.json();
+  logs = raw.map(l => {
+    const dt = drinkTypes.find(d => d.id === l.drink_type_id);
+    return {...l, type: dt?.name || '?', effective: Math.round(l.amount_ml * (dt?.hydration_factor || 1))};
+  });
+  current = logs.reduce((sum, l) => sum + l.effective, 0);
   renderGlass();
   renderLogs();
 }
@@ -60,28 +80,31 @@ async function deleteLog(id){
 // `effective` (amount_ml * hydration_factor) ≠ raw amount_ml: tea/coffee
 // hydrate less than water, so the glass fills by the effective volume
 // while the log keeps the real poured amount.
-async function addEntry(type, amount, factor, meal, comment){
+async function addEntry(typeName, amount, meal, comment){
+  const drink_type_id = findDrinkTypeId(typeName);
   const res = await fetch('/api/logs', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      drink_type: type,
+      drink_type_id: drink_type_id,
       amount_ml: amount,
-      hydration_factor: factor,
-      meal_relation: meal,
+      meal_relation: meal || 'none',
       comment: comment
     })
   });
   const entry = await res.json();
+  const factor = drinkTypes.find(d => d.id === entry.drink_type_id)?.hydration_factor || 1.0;
+  entry.type = typeName;
+  entry.effective = Math.round(entry.amount_ml * factor);
   logs.push(entry);
-  current += Math.round(entry.amount_ml * entry.hydration_factor);
+  current += entry.effective;
   lastEntry = entry;
   renderGlass(); renderLogs();
-  showToast('Добавлено: ' + type + ' ' + amount + ' мл', undoLast);
+  showToast('Добавлено: ' + typeName + ' ' + amount + ' мл', undoLast);
 }
 
-function quickAdd(type, amount, factor){
-  addEntry(type, amount, factor, null, null);
+function quickAdd(type, amount){
+  addEntry(type, amount, null, null);
 }
 
 // Undo = delete the just-created entry via the same API call as deleteLog.
@@ -107,17 +130,23 @@ function selectPill(el, groupId){
   if(groupId === 'amountRow'){ document.getElementById('customAmount').value = ''; }
 }
 
+const MEAL_MAP = {
+  'Без привязки': 'none',
+  'До еды': 'before',
+  'После еды': 'after'
+};
+
 function submitSheet(){
   const type = document.querySelector('#typeRow .active');
   const typeLabel = type.textContent.trim();
-  const factor = parseFloat(type.dataset.factor);
   const custom = document.getElementById('customAmount').value;
   const amountPill = document.querySelector('#amountRow .active');
   const amount = custom ? parseInt(custom) : parseInt(amountPill.textContent);
-  const meal = document.querySelector('#mealRow .active').textContent.trim();
+  const mealLabel = document.querySelector('#mealRow .active').textContent.trim();
+  const meal = MEAL_MAP[mealLabel] || 'none';
   const comment = document.getElementById('commentInput').value;
   if(!amount || amount <= 0) return;
-  addEntry(typeLabel, amount, factor, meal, comment);
+  addEntry(typeLabel, amount, meal, comment);
   document.getElementById('commentInput').value = '';
   closeAll();
 }
