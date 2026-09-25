@@ -52,13 +52,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-@app.get("/api/drink-types", response_model=list[DrinkTypeOut])
-async def list_drink_types(session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(DrinkType))
-    return result.scalars().all()
+# ---------- Water logs ----------
 
-
-@app.get("/api/logs", response_model=list[WaterLogOut])
+@app.get("/api/water-logs", response_model=list[WaterLogOut])
 async def list_logs(session: AsyncSession = Depends(get_session)):
     user = await get_or_create_dev_user(session)
     result = await session.execute(
@@ -69,7 +65,7 @@ async def list_logs(session: AsyncSession = Depends(get_session)):
     return result.scalars().all()
 
 
-@app.post("/api/logs", response_model=WaterLogOut)
+@app.post("/api/water-logs", response_model=WaterLogOut)
 async def add_log(payload: WaterLogCreate, session: AsyncSession = Depends(get_session)):
     user = await get_or_create_dev_user(session)
     log = WaterLog(user_id=user.id, **payload.model_dump())
@@ -79,7 +75,7 @@ async def add_log(payload: WaterLogCreate, session: AsyncSession = Depends(get_s
     return log
 
 
-@app.delete("/api/logs/{log_id}")
+@app.delete("/api/water-logs/{log_id}")
 async def delete_log(log_id: int, session: AsyncSession = Depends(get_session)):
     result = await session.execute(delete(WaterLog).where(WaterLog.id == log_id))
     await session.commit()
@@ -87,5 +83,14 @@ async def delete_log(log_id: int, session: AsyncSession = Depends(get_session)):
         raise HTTPException(404, "not found")
     return {"ok": True}
 
+
+# ---------- Drink Types ----------
+
+@app.get("/api/drink-types", response_model=list[DrinkTypeOut])
+async def list_drink_types(session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(DrinkType))
+    return result.scalars().all()
+
+# ---------- Main Path ----------
 
 app.mount("/", StaticFiles(directory="/frontend", html=True), name="frontend")

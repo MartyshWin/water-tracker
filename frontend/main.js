@@ -27,7 +27,7 @@ function findDrinkTypeId(name){
 // Fetches today's logs from the backend and renders the initial state.
 async function loadLogs(){
   await loadDrinkTypes();
-  const res = await fetch('/api/logs');
+  const res = await fetch('/api/water-logs');
   const raw = await res.json();
   logs = raw.map(l => {
     const dt = drinkTypes.find(d => d.id === l.drink_type_id);
@@ -67,11 +67,11 @@ function renderLogs(){
   });
 }
 
-// Deletes by id (matches the backend's DELETE /api/logs/{id}).
+// Deletes by id (matches the backend's DELETE /api/water-logs/{id}).
 async function deleteLog(id){
   const l = logs.find(x => x.id === id);
   if(!l) return;
-  await fetch('/api/logs/' + id, {method:'DELETE'});
+  await fetch('/api/water-logs/' + id, {method:'DELETE'});
   current = Math.max(0, current - Math.round(l.amount_ml * l.hydration_factor));
   logs = logs.filter(x => x.id !== id);
   renderGlass(); renderLogs();
@@ -82,7 +82,7 @@ async function deleteLog(id){
 // while the log keeps the real poured amount.
 async function addEntry(typeName, amount, meal, comment){
   const drink_type_id = findDrinkTypeId(typeName);
-  const res = await fetch('/api/logs', {
+  const res = await fetch('/api/water-logs', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
