@@ -18,3 +18,10 @@ class UserCreate(UserBase):
 
 class UserUpdate(UserBase):
     pass
+
+class UserOut(UserBase):
+    id: int
+    telegram_id: str
+    daily_goal_ml: int | None
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)

@@ -1,13 +1,14 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 
 from database import engine, Base, get_session
 from models import User, DrinkType, WaterLog
-from schemas import DrinkTypeOut, WaterLogCreate, WaterLogOut
+from schemas import DrinkTypeOut, WaterLogCreate, WaterLogOut, UserUpdate
+from schemas.user import UserOut
 
 # Пресеты справочника напитков — заводятся один раз при первом старте.
 DEFAULT_DRINK_TYPES = [
@@ -54,7 +55,14 @@ app = FastAPI(lifespan=lifespan)
 
 # ---------- Water logs ----------
 
-@app.get("/api/water-logs", response_model=list[WaterLogOut])
+@app.get(
+    "/api/water-logs",
+    response_model=list[WaterLogOut],
+    status_code=status.HTTP_200_OK,
+    tags=["water-logs"],
+    summary="Get a water log entry",
+    responses={404: {"description": "Water Logs not found"}}
+)
 async def list_logs(session: AsyncSession = Depends(get_session)):
     user = await get_or_create_dev_user(session)
     result = await session.execute(
@@ -65,7 +73,14 @@ async def list_logs(session: AsyncSession = Depends(get_session)):
     return result.scalars().all()
 
 
-@app.post("/api/water-logs", response_model=WaterLogOut)
+@app.post(
+    "/api/water-logs",
+    response_model=WaterLogOut,
+    status_code=status.HTTP_201_CREATED,
+    tags=["water-logs"],
+    summary="Add a water log entry",
+    responses={404: {"description": "Drink type not found"}}
+)
 async def add_log(payload: WaterLogCreate, session: AsyncSession = Depends(get_session)):
     user = await get_or_create_dev_user(session)
     log = WaterLog(user_id=user.id, **payload.model_dump())
@@ -74,14 +89,35 @@ async def add_log(payload: WaterLogCreate, session: AsyncSession = Depends(get_s
     await session.refresh(log)
     return log
 
+@app.patch(
+    "/api/profile",
+    response_model=UserOut,
+    status_code=status.HTTP_200_OK,
+    tags=["water-logs"],
+    summary="Update a water log entry",
+    responses={404: {"description": "Water Logs not found"}}
+)
+async def update_profile(payload: UserUpdate, session: AsyncSession = Depends(get_session)):
+    user = await get_or_create_dev_user(session)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
+    await session.commit()
+    await session.refresh(user)
+    return user
 
-@app.delete("/api/water-logs/{log_id}")
+@app.delete(
+    "/api/water-logs/{log_id}",
+    status_code=status.HTTP_200_OK,
+    tags=["water-logs"],
+    summary="Delete a water log entry",
+    responses={404: {"description": "Water Logs not found"}}
+)
 async def delete_log(log_id: int, session: AsyncSession = Depends(get_session)):
     result = await session.execute(delete(WaterLog).where(WaterLog.id == log_id))
     await session.commit()
     if result.rowcount == 0:
-        raise HTTPException(404, "not found")
-    return {"ok": True}
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Water log not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ---------- Drink Types ----------
