@@ -4,11 +4,15 @@ from fastapi import FastAPI, Depends, HTTPException, status, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
+import structlog
 
 from database import engine, Base, get_session
 from models import User, DrinkType, WaterLog
 from schemas import DrinkTypeOut, WaterLogCreate, WaterLogOut, UserUpdate
 from schemas.user import UserOut
+
+
+log = structlog.get_logger()
 
 # Пресеты справочника напитков — заводятся один раз при первом старте.
 DEFAULT_DRINK_TYPES = [
@@ -51,7 +55,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-
+log.info("Start app")
 
 # ---------- Water logs ----------
 
